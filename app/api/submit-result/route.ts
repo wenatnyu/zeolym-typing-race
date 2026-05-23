@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import DOMPurify from "dompurify";
-import { JSDOM } from "jsdom";
+import sanitizeHtml from "sanitize-html";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { TYPING_TEXT, TYPING_TEXT_ID } from "@/lib/typingText";
+
+export const runtime = "nodejs";
 
 type SubmitResultBody = {
   name?: string;
@@ -23,8 +24,10 @@ function calculateResult(typedText: string, timeSeconds: number) {
   }
 
   const totalChars = TYPING_TEXT.length;
+
   const accuracy =
     typedText.length === 0 ? 0 : (correctChars / typedText.length) * 100;
+
   const wpm = timeSeconds > 0 ? correctChars / 5 / (timeSeconds / 60) : 0;
 
   return {
@@ -35,14 +38,23 @@ function calculateResult(typedText: string, timeSeconds: number) {
   };
 }
 
-function sanitizeHtml(html: string) {
-  const window = new JSDOM("").window;
-  const purify = DOMPurify(window);
-
-  return purify.sanitize(html, {
-    ALLOWED_TAGS: ["p", "strong", "em", "u", "span", "br"],
-    ALLOWED_ATTR: ["style"],
-    // ALLOWED_CSS_PROPERTIES: ["color"],
+function cleanSignatureHtml(html: string) {
+  return sanitizeHtml(html, {
+    allowedTags: ["p", "strong", "em", "u", "span", "br"],
+    allowedAttributes: {
+      span: ["style"],
+    },
+    allowedStyles: {
+      span: {
+        color: [
+          /^#(?:[0-9a-fA-F]{3}){1,2}$/,
+          /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/,
+          /^red$/i,
+          /^blue$/i,
+          /^green$/i,
+        ],
+      },
+    },
   });
 }
 
@@ -58,10 +70,7 @@ export async function POST(request: Request) {
     const textId = body.textId ?? TYPING_TEXT_ID;
 
     if (!name) {
-      return NextResponse.json(
-        { error: "Name is required." },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Name is required." }, { status: 400 });
     }
 
     if (!typedText) {
@@ -79,13 +88,10 @@ export async function POST(request: Request) {
     }
 
     if (textId !== TYPING_TEXT_ID) {
-      return NextResponse.json(
-        { error: "Invalid textId." },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Invalid textId." }, { status: 400 });
     }
 
-    const safeSignatureHtml = sanitizeHtml(signatureHtml);
+    const safeSignatureHtml = cleanSignatureHtml(signatureHtml);
 
     const { correctChars, totalChars, accuracy, wpm } = calculateResult(
       typedText,
@@ -110,10 +116,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ result: data });
