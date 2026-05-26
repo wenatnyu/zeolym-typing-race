@@ -15,7 +15,7 @@ type ResultModalProps = {
   accuracy: number;
   elapsedTime: number;
   onClose: () => void;
-  onSubmit: (data: ResultSubmission) => void;
+  onSubmit: (data: ResultSubmission) => Promise<void>;
 };
 
 export default function ResultModal({
@@ -31,8 +31,11 @@ export default function ResultModal({
     "<p>I finished the Zeolym Typing Race! 🔥</p>",
   );
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit() {
+  async function handleSubmit() {
+    if (isSubmitting) return;
+
     const trimmedName = name.trim();
 
     if (!trimmedName) {
@@ -42,11 +45,17 @@ export default function ResultModal({
 
     const safeSignatureHtml = DOMPurify.sanitize(signatureHtml);
 
-    onSubmit({
-      name: trimmedName,
-      className: className.trim(),
-      signatureHtml: safeSignatureHtml,
-    });
+    setIsSubmitting(true);
+
+    try {
+      await onSubmit({
+        name: trimmedName,
+        className: className.trim(),
+        signatureHtml: safeSignatureHtml,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -136,9 +145,10 @@ export default function ResultModal({
           <button
             type="button"
             onClick={handleSubmit}
-            className="w-full rounded-2xl bg-slate-900 px-5 py-4 text-lg font-semibold text-white hover:bg-slate-700"
+            disabled={isSubmitting}
+            className="w-full rounded-2xl bg-slate-900 px-5 py-4 text-lg font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400"
           >
-            Submit Result
+            {isSubmitting ? "Submitting..." : "Submit Result"}
           </button>
         </div>
       </div>
